@@ -284,7 +284,7 @@ with st.expander("5. Lifestyle, Kinder & Sonderausgaben", expanded=False):
 with st.expander("6. Rentenphase & Entnahme", expanded=False):
     renten_alter = st.number_input("Renteneintrittsalter", value=67)
     gesetzl_rente = st.number_input("Erwartete Gesetzl. Rente (Netto nach Steuer) €", value=3000)
-    entnahme_modus = st.radio("Entnahme-Strategie", ["Kapitalverzehr (Alles ausgeben)", "Ewige Rente (Nur Erträge)"],value="Ewige Rente (Nur Erträge)" )
+    entnahme_modus = st.radio("Entnahme-Strategie", ["Kapitalverzehr (Alles ausgeben)", "Ewige Rente (Nur Erträge)"],index=1 )
 
 # ==============================================================================
 # LOGIC ENGINE
