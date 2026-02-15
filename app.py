@@ -134,7 +134,7 @@ with st.expander("3. Wohnsituation (Miete vs. Kauf)", expanded=False):
         
     st.divider()
     
-    house_mode = st.radio("Strategie", ["Miete", "Eigenheim Kaufen"], horizontal=True, value=True)
+    house_mode = st.radio("Strategie", ["Miete", "Eigenheim Kaufen"], horizontal=True, index=1)
     
     if house_mode == "Eigenheim Kaufen":
         st.markdown("### 🏠 Kauf & Finanzierung")
