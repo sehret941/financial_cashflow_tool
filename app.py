@@ -2,370 +2,403 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
+import plotly.express as px
 
 # --- PAGE CONFIG ---
-st.set_page_config(page_title="Pro Cashflow & Partner Split", page_icon="🏠", layout="wide")
-st.title("🏠 Pro Cashflow: Partner-Split & Kredit-Rechner")
-st.markdown("""
-Dieses Tool trennt strikt zwischen **Gesamtkosten (Haushalt)** und **Deinem Anteil**.
-Zudem bietet es eine professionelle Finanzierungsrechnung für Immobilien (Laufzeit vs. Rate).
-""")
+st.set_page_config(page_title="Finanzplanung Pro", page_icon="📊", layout="wide")
 
-# ==========================================
-# 1. SZENARIO & PARTNER SPLIT
-# ==========================================
-with st.sidebar.expander("1. Szenario & Partner Split", expanded=True):
-    # Split Logik
-    st.subheader("Kostenaufteilung")
-    split_pct = st.slider("Mein Kostenanteil (Miete/Essen/Haus) %", 0, 100, 65, help="Wieviel % der gemeinsamen Kosten trägst DU?") / 100.0
-    
-    st.markdown("---")
-    # Markt
-    szenario = st.selectbox("Marktphase", ["Neutral (5% / 2%)", "Bullish (8% / 1.5%)", "Bearish (3% / 4%)"])
-    if szenario == "Neutral (5% / 2%)":
-        rendite = 5.0; inflation = 2.0
-    elif szenario.startswith("Bullish"):
-        rendite = 8.0; inflation = 1.5
-    else:
-        rendite = 3.0; inflation = 4.0
-        
-    rendite_input = st.number_input("Rendite p.a. (%)", value=rendite, step=0.1)/100
-    inflation_input = st.number_input("Inflation p.a. (%)", value=inflation, step=0.1)/100
-    
-    alter_jetzt = st.number_input("Dein Alter", value=31)
-    alter_ziel = st.number_input("Ziel Alter", value=67)
-    startkapital = st.number_input("Dein Startkapital €", value=50000)
+# CSS HACK: Padding oben reduzieren für Dashboard-Look
+st.markdown(" <style> div.block-container{padding-top:1rem;} </style> ", unsafe_allow_html=True)
 
-# ==========================================
-# 2. EINKOMMEN (NUR DU)
-# ==========================================
-with st.sidebar.expander("2. Dein Einkommen (Karriere)", expanded=False):
-    st.info("Hier kommen nur DEINE Einnahmen rein.")
-    # Stufe 1
-    brutto_start = st.number_input("Brutto Aktuell €", value=100000)
-    var_anteil = st.slider("Variabler Anteil %", 0, 100, 20) / 100
-    steigerung = st.number_input("Steigerung p.a. %", value=3.0) / 100
-    
-    # Beförderung
-    has_promo = st.checkbox("Beförderung geplant?")
-    promo_alter = 0; promo_brutto = 0
-    if has_promo:
-        c1, c2 = st.columns(2)
-        promo_alter = c1.number_input("Alter Beförderung", value=38)
-        promo_brutto = c2.number_input("Neues Brutto €", value=140000)
-        
-    # Steuer-Funktion (Vereinfacht)
-    def net_calc(brutto):
-        # Ganz grobe Annäherung Steuerklasse 1
-        sozial = min(brutto * 0.2, 16000)
-        taxable = brutto - sozial - 1200
-        if taxable < 11000: tax = 0
-        elif taxable < 62000: tax = (taxable - 11000) * 0.35 # Mittelwert
-        else: tax = 15000 + (taxable - 62000) * 0.42
-        return brutto - sozial - tax
+st.title("📊 Financial Projection & Cashflow Engine")
 
-# ==========================================
-# 3. WOHNEN (HAUSHALT TOTAL)
-# ==========================================
-with st.sidebar.expander("3. Wohnen (Haushalt Total)", expanded=True):
-    wohn_modus = st.radio("Modus", ["Miete", "Kauf"])
-    
-    miete_total = 0; nk_total = 0
-    rate_total = 0; haus_wert = 0; restschuld_start = 0; zins = 0; tilgung_calc = 0
-    
-    # Nebenkosten immer
-    nk_total = st.number_input("Nebenkosten Total (Warm/Strom/Internet) €", value=450, help="Gesamte NK für alle Personen")
-    
-    if wohn_modus == "Miete":
-        miete_total = st.number_input("Kaltmiete Total €", value=1600)
-        miet_steigerung = st.number_input("Mietsteigerung %", value=2.0)/100
-    
-    else: # KAUF
-        st.write("---")
-        st.subheader("Finanzierung (Gesamtobjekt)")
-        kauf_alter = st.number_input("Kaufalter", value=35)
-        kaufpreis = st.number_input("Kaufpreis (inkl. NK) €", value=600000)
-        ek_total = st.number_input("Eigenkapital Total €", value=100000)
-        kredit_betrag = kaufpreis - ek_total
-        
-        st.info(f"Zu finanzieren: {kredit_betrag:,.0f} €")
-        
-        zins = st.number_input("Sollzins %", value=3.4) / 100
-        
-        # DER KNACKPUNKT: Rate oder Laufzeit
-        calc_method = st.radio("Berechnungsziel", ["Rate vorgeben (Wann fertig?)", "Laufzeit vorgeben (Welche Rate?)"])
-        
-        if calc_method == "Rate vorgeben (Wann fertig?)":
-            rate_wunsch = st.number_input("Wunschrate (Zins+Tilgung) €", value=2300)
-            rate_total = rate_wunsch
-            # Plausi Check Zins
-            min_zins_cost = kredit_betrag * (zins / 12)
-            if rate_total <= min_zins_cost:
-                st.error(f"Rate zu niedrig! Zinsen sind schon {min_zins_cost:.0f}€. Kredit wächst!")
-        else:
-            laufzeit_jahre = st.number_input("Laufzeit (Jahre)", value=25)
-            # Annuitätenformel
-            # R = K * (q^n * (q-1)) / (q^n - 1)  mit q = 1 + zins/12
-            q = 1 + (zins / 12)
-            n_monate = laufzeit_jahre * 12
-            rate_total = kredit_betrag * (q**n_monate * (q-1)) / (q**n_monate - 1)
-            st.success(f"Notwendige Rate: {rate_total:,.2f} €")
-            
-        instandhaltung = st.number_input("Instandhaltung Total €", value=400)
-        haus_wert = kaufpreis
-        restschuld_start = kredit_betrag
+# ==============================================================================
+# INPUT SECTION (TABS STATT SIDEBAR)
+# ==============================================================================
 
-# ==========================================
-# 4. LEBEN & AUTO (DETAIL & SPLIT)
-# ==========================================
-with st.sidebar.expander("4. Ausgaben (Detail & Split)", expanded=False):
-    st.caption("Standardwerte sind vorausgefüllt. 'Geteilt' wird mit deinem %-Satz verrechnet.")
+# Wir gruppieren die Eingaben logisch in 4 Haupt-Tabs
+tab_set, tab_job, tab_home, tab_life = st.tabs([
+    "⚙️ Setup & Szenarien", 
+    "💼 Karriere & Einkommen", 
+    "🏠 Wohnen & Immobilien", 
+    "🛒 Lifestyle, Auto & Familie"
+])
+
+# --- TAB 1: SETUP ---
+with tab_set:
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        st.subheader("Profil")
+        age_now = st.number_input("Aktuelles Alter", 20, 65, 31)
+        age_end = st.number_input("Ziel Alter (Rente)", 35, 90, 67)
+        capital = st.number_input("Startkapital (Depot) €", value=50000)
     
-    # GETEILTE KOSTEN
-    st.markdown("**Geteilte Kosten (Haushalt)**")
+    with c2:
+        st.subheader("Markt-Szenario")
+        scenario = st.selectbox("Marktphase", ["Basis (5% / 2%)", "Bullish (7% / 1.5%)", "Bearish (3% / 4%)"])
+        if "Basis" in scenario: r_inv = 0.05; r_inf = 0.02
+        elif "Bullish" in scenario: r_inv = 0.07; r_inf = 0.015
+        else: r_inv = 0.03; r_inf = 0.04
+        
+        # Manuelle Overrides möglich machen, aber kompakt
+        col_sub1, col_sub2 = st.columns(2)
+        invest_return = col_sub1.number_input("Ø Rendite %", value=r_inv*100, step=0.1)/100
+        inflation = col_sub2.number_input("Ø Inflation %", value=r_inf*100, step=0.1)/100
+    
+    with c3:
+        st.subheader("Haushalt & Split")
+        split_share = st.slider("Mein Kostenanteil (%)", 0, 100, 65, help="Wieviel % der gemeinsamen Kosten (Miete, Essen) zahlst DU?") / 100
+        has_partner = st.checkbox("Partner im Haushalt?", value=True)
+
+# --- TAB 2: KARRIERE ---
+with tab_job:
     c1, c2 = st.columns(2)
-    var_supermarkt = c1.number_input("Supermarkt/Drogerie (Total) €", value=600)
-    var_essen = c2.number_input("Restaurant/Bestellen (Total) €", value=200)
-    var_urlaub = c1.number_input("Urlaub Budget (Jahr Total) €", value=4000)
-    var_sonst = c2.number_input("Sonstiges Gemeinsam €", value=200)
-    
-    summe_geteilt = var_supermarkt + var_essen + (var_urlaub/12) + var_sonst
-    
-    # PERSÖNLICHE KOSTEN
-    st.markdown("---")
-    st.markdown("**Nur Deine Kosten (100%)**")
-    pers_handy = st.number_input("Dein Handy/Abos €", value=60)
-    pers_fun = st.number_input("Dein Spaß/Hobby/Rauchen €", value=300)
-    pers_geschenke = st.number_input("Geschenke €", value=100)
-    
-    # AUTO (KOMPLEX)
-    st.markdown("---")
-    st.markdown("**Dein Auto**")
-    auto_typ = st.selectbox("Auto Finanzierung", ["Leasing", "Kauf (Bar)", "Kein Auto"])
-    auto_kosten = 0; auto_kauf_preis = 0; auto_intervall = 0; auto_steuer = 0
-    
-    if auto_typ == "Leasing":
-        auto_kosten = st.number_input("Leasingrate €", value=450)
-        auto_steuer = st.number_input("Vers./Steuer (Jahr) €", value=800)
-    elif auto_typ == "Kauf (Bar)":
-        auto_kauf_preis = st.number_input("Kaufpreis €", value=35000)
-        auto_intervall = st.number_input("Neukauf alle X Jahre", value=8)
-        auto_kosten = st.number_input("Rücklage Reparatur €", value=150)
-        auto_steuer = st.number_input("Vers./Steuer (Jahr) €", value=800)
+    with c1:
+        st.markdown("##### Aktuelle Situation")
+        salary_brutto = st.number_input("Jahresbrutto (Aktuell) €", value=100000, step=1000)
+        salary_var_pct = st.slider("Variabler Anteil (Bonus) %", 0, 100, 20)/100
+        salary_growth = st.number_input("Gehaltssteigerung p.a. %", value=2.0)/100
+        
+        bonus_save_rate = st.slider("Bonus Sparquote %", 0, 100, 50, help="Wieviel vom Netto-Bonus wird gespart?")/100
 
-# ==========================================
-# SIMULATION ENGINE
-# ==========================================
-def simulate():
-    months = (alter_ziel - alter_jetzt) * 12
+    with c2:
+        st.markdown("##### Karriere-Sprung (Beförderung)")
+        promo_active = st.checkbox("Beförderung simulieren?")
+        promo_age, promo_brutto = 0, 0
+        if promo_active:
+            sc1, sc2 = st.columns(2)
+            promo_age = sc1.number_input("Alter bei Sprung", value=36)
+            promo_brutto = sc2.number_input("Zielgehalt Brutto €", value=140000)
+
+# --- TAB 3: WOHNEN ---
+with tab_home:
+    mode_housing = st.radio("Wohnstrategie", ["Miete", "Eigenheim Kauf"], horizontal=True)
+    
+    c1, c2, c3 = st.columns(3)
+    
+    # Init variables
+    rent_cold, rent_incr_type, rent_incr_val = 0, "Index", 0
+    buy_age, house_price, down_payment, interest, amortization, maintenance = 0,0,0,0,0,0
+    loan_calc_mode = "Annuität"
+    
+    # Fixkosten Wohnen (immer da)
+    with c1:
+        st.markdown("##### Nebenkosten (Gesamt)")
+        nk_total = st.number_input("Warm/Strom/Internet (Total) €", value=450)
+    
+    if mode_housing == "Miete":
+        with c2:
+            st.markdown("##### Miet-Details")
+            rent_cold = st.number_input("Kaltmiete (Total) €", value=1600)
+        with c3:
+            st.markdown("##### Steigerung")
+            rent_incr_type = st.selectbox("Art der Erhöhung", ["Index (%)", "Staffel (€)"])
+            if rent_incr_type == "Index (%)":
+                rent_incr_val = st.number_input("Steigerung %", value=2.0)/100
+            else:
+                rent_incr_val = st.number_input("Erhöhung € (pauschal)", value=30)
+    else:
+        with c2:
+            st.markdown("##### Kauf-Parameter")
+            buy_age = st.number_input("Kaufalter", value=35)
+            house_price = st.number_input("Kaufpreis (All-In) €", value=600000)
+            down_pay_total = st.number_input("Eigenkapital (Total) €", value=120000)
+            maintenance = st.number_input("Instandhaltung (mtl.) €", value=400)
+        
+        with c3:
+            st.markdown("##### Finanzierung")
+            interest = st.number_input("Sollzins %", value=3.5)/100
+            
+            calc_target = st.radio("Zielgröße", ["Rate vorgeben", "Laufzeit vorgeben"])
+            loan_amount = house_price - down_pay_total
+            
+            sim_rate_total = 0
+            if calc_target == "Rate vorgeben":
+                sim_rate_total = st.number_input("Wunschrate (Zins+Tilgung) €", value=2300)
+            else:
+                target_years = st.number_input("Soll-Laufzeit (Jahre)", value=25)
+                # Annuitätenformel
+                q = 1 + interest/12
+                n = target_years * 12
+                if loan_amount > 0:
+                    sim_rate_total = loan_amount * (q**n * (q-1))/(q**n - 1)
+                st.info(f"Notwendige Rate: **{sim_rate_total:,.2f} €**")
+
+# --- TAB 4: LIFESTYLE ---
+with tab_life:
+    c1, c2, c3, c4 = st.columns(4)
+    
+    with c1:
+        st.markdown("##### 🛒 Geteilt (Haushalt)")
+        st.caption("Essen, Drogerie, Gemeinsames")
+        cost_shared_var = st.number_input("Lebenshaltung Total €", value=800)
+        cost_shared_fun = st.number_input("Gemeinsam Freizeit €", value=200)
+    
+    with c2:
+        st.markdown("##### 🕺 Privat (Nur Du)")
+        st.caption("Handy, Hobby, Rauchen")
+        cost_pers_fix = st.number_input("Abos & Handy €", value=60)
+        cost_pers_fun = st.number_input("Spaß / Hobby / Laster €", value=300)
+        cost_pers_gift = st.number_input("Geschenke €", value=100)
+        
+    with c3:
+        st.markdown("##### ✈️ Sonderausgaben (Jahr)")
+        vacation_budget = st.number_input("Urlaubsbudget (Total) €", value=4000)
+        xmas_budget = st.number_input("Weihnachten (Privat) €", value=500)
+        
+    with c4:
+        st.markdown("##### 🚗 Auto & Familie")
+        car_mode = st.selectbox("Auto", ["Leasing", "Kauf", "Kein Auto"])
+        car_cost, car_invest, car_cycle = 0,0,0
+        if car_mode == "Leasing":
+            car_cost = st.number_input("Rate + Vers. €", value=500)
+        elif car_mode == "Kauf":
+            car_invest = st.number_input("Kaufpreis €", value=35000)
+            car_cycle = st.number_input("Alle X Jahre", value=8)
+            car_cost = st.number_input("Reparatur/Vers. mtl €", value=200)
+            
+        has_kids = st.checkbox("Kinderplanung?")
+        kids_n, kids_age, kids_cost, k_geld = 0,0,0,0
+        if has_kids:
+            kids_n = st.number_input("Anzahl", 1, 4, 2)
+            kids_age = st.number_input("Alter bei 1. Kind", value=33)
+            kids_cost = st.number_input("Kosten/Kind €", value=500)
+            k_geld = 250
+
+# ==============================================================================
+# LOGIC ENGINE
+# ==============================================================================
+
+def calc_tax_simplified(brutto):
+    # Sehr einfache DE Steuer-Logik für Simulation
+    # SV ca 20%, Steuer progressiv
+    sv = min(brutto * 0.2, 16000) # BBG Cap Deckelung
+    taxable = brutto - sv - 1200 # WK
+    if taxable < 11600: tax = 0
+    elif taxable < 66000: tax = (taxable - 11600) * 0.35
+    else: tax = 19000 + (taxable - 66000) * 0.42
+    return max(0, brutto - sv - tax)
+
+def run_simulation():
+    months = (age_end - age_now) * 12
     data = []
     
-    wealth = startkapital
-    equity_house = 0
-    loan_balance = 0
-    has_house = False
+    # State Vars
+    wealth = capital
+    loan_bal = 0
+    house_val = 0
+    own_house = False
     
-    # Current Values (Total)
-    curr_brutto = brutto_start
-    curr_miete_total = miete_total
-    curr_nk_total = nk_total
-    curr_instand = 0 if wohn_modus == "Miete" else instandhaltung
+    # Current pointers
+    cur_brutto = salary_brutto
+    cur_rent = rent_cold
+    cur_nk = nk_total
     
-    curr_geteilt_monthly = var_supermarkt + var_essen + var_sonst
-    curr_urlaub_yr = var_urlaub
+    cur_shared_living = cost_shared_var + cost_shared_fun
+    cur_pers_living = cost_pers_fix + cost_pers_fun + cost_pers_gift
     
-    curr_pers_fix = pers_handy + pers_fun + pers_geschenke
+    cur_car_mtl = car_cost
+    cur_vacation = vacation_budget
+    cur_xmas = xmas_budget
+    cur_kids_c = kids_cost
     
-    curr_auto_monthly = auto_kosten
-    curr_auto_tax = auto_steuer
-    
-    # KAUF SIM VARS
-    sim_rate = 0
+    sim_rate = 0 # Für Hypothek
     
     for m in range(months + 1):
-        year_idx = m // 12
-        month_idx = m % 12
-        age = alter_jetzt + year_idx
+        idx_yr = m // 12
+        idx_mo = m % 12
+        age = age_now + idx_yr
+        year = 2026 + idx_yr
         
-        # --- 1. JÄHRLICHE UPDATES (Januar) ---
-        if m > 0 and month_idx == 0:
-            inf = (1 + inflation_input)
-            # Kosten wachsen
-            curr_nk_total *= inf
-            curr_instand *= inf
-            curr_geteilt_monthly *= inf
-            curr_urlaub_yr *= inf
-            curr_pers_fix *= inf
-            curr_auto_monthly *= inf
-            curr_auto_tax *= inf
+        # --- A. JÄHRLICHE ANPASSUNG (Inflation) ---
+        if m > 0 and idx_mo == 0:
+            f_inf = (1 + inflation)
+            cur_nk *= f_inf
+            cur_shared_living *= f_inf
+            cur_pers_living *= f_inf
+            cur_car_mtl *= f_inf
+            cur_vacation *= f_inf
+            cur_xmas *= f_inf
+            cur_kids_c *= f_inf
             
-            # Gehalt wächst
-            curr_brutto *= (1 + steigerung)
+            cur_brutto *= (1 + salary_growth)
             
-            # Miete wächst
-            if not has_house and wohn_modus == "Miete":
-                curr_miete_total *= (1 + miet_steigerung)
+            if own_house:
+                house_val *= f_inf
+            elif mode_housing == "Miete":
+                if rent_incr_type == "Index (%)": cur_rent *= (1 + rent_incr_val)
+                else: cur_rent += rent_incr_val
             
-            # Auto Kauf (Cash Event)
-            if auto_typ == "Kauf (Bar)" and year_idx > 0 and year_idx % auto_intervall == 0:
-                price_now = auto_kauf_preis * (inf**year_idx)
-                wealth -= price_now
+            # Auto Kauf Event (Cash)
+            if car_mode == "Kauf" and idx_yr > 0 and idx_yr % car_cycle == 0:
+                price_adj = car_invest * (f_inf ** idx_yr)
+                wealth -= price_adj
 
-        # --- 2. EVENTS ---
-        # Beförderung
-        if has_promo and age == promo_alter and month_idx == 0:
-            curr_brutto = promo_brutto
+        # --- B. EVENTS ---
+        if promo_active and age == promo_age and idx_mo == 0:
+            cur_brutto = promo_brutto
             
-        # Hauskauf
-        if wohn_modus == "Kauf" and age == kauf_alter and month_idx == 0 and not has_house:
-            # Wir ziehen nur DEINEN Anteil am Eigenkapital ab? 
-            # Annahme: Du zahlst deinen Split-Anteil am EK oder alles?
-            # Hier: Wir nehmen Split-Anteil vom EK
-            my_ek_invest = ek_total * split_pct
-            wealth -= my_ek_invest
+        if mode_housing == "Eigenheim Kauf" and age == buy_age and idx_mo == 0 and not own_house:
+            # Kauf findet statt
+            # Wir nehmen an, DU zahlst deinen Share am EK oder alles? 
+            # Hier: Split Share vom EK wird vom Vermögen abgezogen
+            ek_invest_mine = down_pay_total * split_share
+            wealth -= ek_invest_mine
             
-            loan_balance = kredit_betrag
-            sim_rate = rate_total
-            has_house = True
-            curr_miete_total = 0
+            loan_bal = loan_amount
+            sim_rate = sim_rate_total
+            house_val = house_price
+            own_house = True
+            cur_rent = 0 
             
-        # --- 3. INCOME ---
-        # Netto Rechner
-        netto_total = net_calc(curr_brutto)
+        # --- C. INCOME ---
+        netto_year = calc_tax_simplified(cur_brutto)
+        netto_base = (netto_year * (1 - salary_var_pct)) / 12
         
-        # Aufteilung Fix/Var
-        income_month = (netto_total * (1 - var_anteil)) / 12
+        bonus_payout = 0
+        if idx_mo == 11: # Dezember Bonus
+            bonus_full = netto_year * salary_var_pct
+            # Bonus Konsum abziehen (Wir addieren nur den Sparanteil zum Wealth)
+            # ODER: Wir addieren alles zum Income und ziehen den Konsum bei Ausgaben ab
+            # User Logik: Split Bonus Saved.
+            # Einkommen = Fix + Bonus. Ausgabe = Bonus * (1-SaveRate)
+            bonus_payout = bonus_full
         
-        # Bonus im Dezember
-        if month_idx == 11:
-            income_month += (netto_total * var_anteil)
+        income_mo = netto_base + bonus_payout
+        
+        # Kindergeld
+        n_kids_active = 0
+        if has_kids and age >= kids_age and age < (kids_age + 20):
+            n_kids_active = kids_n
+            income_mo += (n_kids_active * k_geld)
+
+        # --- D. AUSGABEN (SPLIT LOGIK) ---
+        
+        # 1. Wohnen (Total)
+        cost_housing_total = cur_rent + cur_nk
+        if own_house:
+            cost_housing_total = sim_rate + cur_nk + maintenance # maintenance steigt nicht im Loop, evtl fixen? lassen wir flat.
+            # Tilgung
+            interest_eur = loan_bal * (interest/12)
+            tilgung_eur = sim_rate - interest_eur
+            loan_bal -= tilgung_eur
+            if loan_bal < 0: loan_bal = 0
             
-        # --- 4. EXPENSES (THE SPLIT) ---
+        # 2. Variable Shared (Total)
+        # Urlaub im Juli (Monat 6)
+        cost_shared_mo = cur_shared_living
+        if idx_mo == 6: cost_shared_mo += cur_vacation
         
-        # A. Wohnen
-        cost_housing_total = curr_miete_total + curr_nk_total
-        if has_house:
-            cost_housing_total = sim_rate + curr_nk_total + curr_instand
-            # Kredit Tilgung im Hintergrund (Gesamtbetrachtung Bank)
-            interest = loan_balance * (zins / 12)
-            principal = sim_rate - interest
-            loan_balance -= principal
-            if loan_balance < 0: loan_balance = 0
+        # DEIN ANTEIL (SPLIT)
+        my_housing = cost_housing_total * split_share
+        my_shared_living = cost_shared_mo * split_share
+        
+        # 3. Persönlich (100% Du)
+        my_personal = cur_pers_living + cur_car_mtl
+        if idx_mo == 11: my_personal += cur_xmas
+        
+        # Kinder (Split?) -> Annahme: Kinderkosten werden geteilt
+        cost_kids_total = n_kids_active * cur_kids_c
+        my_kids_cost = cost_kids_total * split_share
+        
+        # Bonus Konsum (Dez)
+        if idx_mo == 11 and bonus_payout > 0:
+            my_personal += (bonus_payout * (1 - bonus_save_rate))
             
-        # DEIN ANTEIL WOHNEN
-        my_housing_cost = cost_housing_total * split_pct
+        total_expenses = my_housing + my_shared_living + my_personal + my_kids_cost
         
-        # B. Leben Geteilt
-        # Urlaub monatlich glätten oder im Sommer? 
-        # User wollte Glättung im Standard, aber wir buchen es hier im Monat
-        cost_shared_items = curr_geteilt_monthly
-        if month_idx == 6: # Sommerurlaub
-            cost_shared_items += curr_urlaub_yr
-            
-        # DEIN ANTEIL LEBEN
-        my_living_shared = cost_shared_items * split_pct
+        # --- E. CASHFLOW & WEALTH ---
+        cf = income_mo - total_expenses
         
-        # C. Persönlich (100% Du)
-        my_personal = curr_pers_fix + curr_auto_monthly
-        if month_idx == 0:
-            my_personal += curr_auto_tax
-            
-        # TOTAL OUT
-        total_out = my_housing_cost + my_living_shared + my_personal
+        wealth *= (1 + invest_return)**(1/12)
+        wealth += cf
         
-        # --- 5. CASHFLOW ---
-        cashflow = income_month - total_out
-        
-        # Zinsen Depot
-        wealth *= (1 + rendite_input)**(1/12)
-        wealth += cashflow
-        
-        # Hauswert (für Networth)
-        house_value_curr = 0
-        if has_house:
-            # Haus wächst mit Inflation
-            house_value_curr = haus_wert * ((1 + inflation_input)**(m/12))
-        
-        # Dein Net Worth Anteil am Haus
-        # (Hauswert - Schulden) * Split_Pct
-        equity_net = max(0, house_value_curr - loan_balance) * split_pct
+        # Net Worth Share (Haus Equity)
+        equity = max(0, house_val - loan_bal) * split_share
         
         data.append({
-            "Alter": age,
-            "Jahr": 2026 + year_idx,
-            "Monat": month_idx + 1,
-            "Netto_Income": round(income_month),
-            "Ausgabe_Wohnen_Anteil": round(my_housing_cost),
-            "Ausgabe_Leben_Anteil": round(my_living_shared),
-            "Ausgabe_Privat": round(my_personal),
-            "Total_Ausgaben": round(total_out),
-            "Sparbetrag": round(cashflow),
-            "Depot_Wert": round(wealth),
-            "Immo_Equity_Mein": round(equity_net),
-            "Gesamt_Networth": round(wealth + equity_net),
-            "Restschuld_Gesamt": round(loan_balance)
+            "Alter": age, "Jahr": year, "Monat": idx_mo+1,
+            "Netto": round(income_mo),
+            "Ausgaben": round(total_expenses),
+            "Cashflow": round(cf),
+            "Vermögen": round(wealth),
+            "Immo_Equity": round(equity),
+            "Total_Net_Worth": round(wealth + equity),
+            "Schulden_Total": round(loan_bal),
+            # Details für Analyse
+            "Kosten_Wohnen": my_housing,
+            "Kosten_Leben": my_shared_living + my_personal,
+            "Kosten_Kinder": my_kids_cost
         })
         
     return pd.DataFrame(data)
 
-df = simulate()
+df = run_simulation()
 
-# ==========================================
-# DASHBOARD
-# ==========================================
+# ==============================================================================
+# OUTPUT / DASHBOARD
+# ==============================================================================
+st.divider()
 
-# KPI
-final_nw = df.iloc[-1]["Gesamt_Networth"]
-final_depot = df.iloc[-1]["Depot_Wert"]
-final_debt = df.iloc[-1]["Restschuld_Gesamt"]
-
-c1, c2, c3 = st.columns(3)
-c1.metric("Dein Endvermögen (Split bereinigt)", f"{final_nw:,.0f} €")
-c2.metric("Dein Depotstand", f"{final_depot:,.0f} €")
-if final_debt > 0:
-    c3.metric("Restschuld Haus (Gesamt)", f"{final_debt:,.0f} €", "Noch nicht abbezahlt!", delta_color="inverse")
+# --- KPIs ---
+last = df.iloc[-1]
+c1, c2, c3, c4 = st.columns(4)
+c1.metric("Endvermögen (Dein Anteil)", f"{last['Total_Net_Worth']:,.0f} €", delta="Liquid + Immo")
+c2.metric("Liquides Depot", f"{last['Vermögen']:,.0f} €")
+c3.metric("Immobilien Equity (Netto)", f"{last['Immo_Equity']:,.0f} €")
+if last['Schulden_Total'] > 1000:
+    c4.metric("Restschuld Haus (Gesamt)", f"{last['Schulden_Total']:,.0f} €", "⚠️ Noch offen")
 else:
-    c3.metric("Haus", "Abbezahlt ✅")
+    c4.metric("Haus Status", "Schuldenfrei ✅")
 
-# TABS
-tab1, tab2, tab3 = st.tabs(["📊 Charts", "📋 Daten", "ℹ️ Berechnung"])
+# --- CHARTS AREA ---
+tab_ch1, tab_ch2, tab_data = st.tabs(["📈 Analyse & Charts", "🍩 Ausgaben Struktur", "📋 Rohdaten"])
 
-with tab1:
-    st.subheader("Vermögensentwicklung (Nur Dein Anteil)")
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(x=df["Alter"], y=df["Depot_Wert"], name="Dein Depot", stackgroup='one'))
-    fig.add_trace(go.Scatter(x=df["Alter"], y=df["Immo_Equity_Mein"], name="Dein Haus-Equity", stackgroup='one'))
-    st.plotly_chart(fig, use_container_width=True)
+with tab_ch1:
+    col_g1, col_g2 = st.columns([2,1])
     
-    st.divider()
-    
-    st.subheader("Einnahmen vs. Ausgaben (Dein Cashflow)")
-    # Aggregation auf Jahre
-    df_yr = df.groupby("Alter").sum(numeric_only=True).reset_index()
-    fig2 = go.Figure()
-    fig2.add_trace(go.Bar(x=df_yr["Alter"], y=df_yr["Netto_Income"], name="Dein Netto", marker_color="#2ecc71"))
-    fig2.add_trace(go.Bar(x=df_yr["Alter"], y=df_yr["Total_Ausgaben"], name="Deine Ausgaben", marker_color="#e74c3c"))
-    st.plotly_chart(fig2, use_container_width=True)
-
-with tab2:
-    st.dataframe(df)
-    st.download_button("CSV Export", df.to_csv().encode("utf-8"), "pro_cashflow.csv")
-
-with tab3:
-    st.markdown("""
-    ### So rechnet das Tool
-    
-    1.  **Split-Logik**:
-        * Alle Kosten unter "Wohnen" und "Geteilte Kosten" werden addiert.
-        * Dann wird mit deinem Faktor **{:.0f}%** multipliziert.
-        * Beispiel: Miete 2.000€ * 0.65 = Du zahlst 1.300€.
-    
-    2.  **Immobilien-Kredit (Annuität)**:
-        * Wir nutzen die bankübliche Formel.
-        * *Laufzeit-Modus:* Berechnet die Rate, damit die Restschuld nach X Jahren exakt 0 ist.
-        * *Raten-Modus:* Prüft monatlich, wie viel getilgt wird. Wenn Rate < Zinsen, wachsen die Schulden (Warnung!).
+    with col_g1:
+        st.subheader("Vermögensentwicklung")
+        fig_nw = go.Figure()
+        fig_nw.add_trace(go.Scatter(x=df["Alter"], y=df["Vermögen"], name="Liquide (Depot)", stackgroup='one', line=dict(width=0)))
+        if mode_housing == "Eigenheim Kauf":
+            fig_nw.add_trace(go.Scatter(x=df["Alter"], y=df["Immo_Equity"], name="Immo Equity", stackgroup='one', line=dict(width=0)))
+        fig_nw.update_layout(hovermode="x unified", margin=dict(l=0,r=0,t=0,b=0), height=400)
+        st.plotly_chart(fig_nw, use_container_width=True)
         
-    3.  **Auto**:
-        * Kauf-Option zieht alle X Jahre einen großen Batzen Cash vom Depot ab (simuliert Neuanschaffung + Inflation).
-    """.format(split_pct*100))
+    with col_g2:
+        st.subheader("Cashflow (Jährlich)")
+        df_yr = df.groupby("Alter").sum(numeric_only=True).reset_index()
+        fig_cf = go.Figure()
+        fig_cf.add_trace(go.Bar(x=df_yr["Alter"], y=df_yr["Netto"], name="Einnahmen", marker_color="#4CAF50"))
+        fig_cf.add_trace(go.Bar(x=df_yr["Alter"], y=df_yr["Ausgaben"], name="Ausgaben", marker_color="#F44336"))
+        fig_cf.update_layout(barmode='overlay', margin=dict(l=0,r=0,t=0,b=0), height=400, legend=dict(orientation="h", y=1.1))
+        st.plotly_chart(fig_cf, use_container_width=True)
 
+with tab_ch2:
+    st.subheader("Wofür gibst du dein Geld aus?")
+    st.caption("Durchschnittliche Verteilung über die gesamte Laufzeit (Dein Anteil)")
+    
+    # Summen über alles
+    avg_housing = df["Kosten_Wohnen"].mean()
+    avg_living = df["Kosten_Leben"].mean()
+    avg_kids = df["Kosten_Kinder"].mean()
+    avg_save = df["Cashflow"].mean()
+    
+    labels = ["Wohnen", "Leben/Auto/Spaß", "Kinder", "Sparrate"]
+    values = [avg_housing, avg_living, avg_kids, avg_save]
+    
+    c_pie1, c_pie2 = st.columns(2)
+    with c_pie1:
+        fig_pie = px.pie(names=labels, values=values, hole=0.4, color_discrete_sequence=px.colors.sequential.RdBu)
+        st.plotly_chart(fig_pie, use_container_width=True)
+    with c_pie2:
+        st.markdown(f"""
+        **Analyse:**
+        * Durchschnittliche Sparrate: **{avg_save:,.0f} € / Monat**
+        * Wohnkostenquote: **{(avg_housing/(avg_housing+avg_living+avg_kids+avg_save))*100:.1f}%**
+        """)
+
+with tab_data:
+    st.dataframe(df, use_container_width=True)
+    st.download_button("CSV Exportieren", df.to_csv(sep=";", decimal=",").encode('utf-8'), "finanzplan.csv")
