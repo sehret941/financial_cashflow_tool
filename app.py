@@ -53,7 +53,7 @@ with st.expander("1. Grundeinstellungen, Partner & Markt", expanded=False):
         r_invest = st.number_input("Rendite p.a. (Brutto) %", value=8.0)/100
         r_infla = st.number_input("Inflation p.a. %", value=2.0)/100
         
-        has_cap_tax = st.checkbox("Kapitalertragsteuer abziehen?", value=True)
+        has_cap_tax = st.checkbox("Kapitalertragsteuer abziehen?", value=False)
         if has_cap_tax:
             cap_freibetrag = st.number_input("Sparer-Pauschbetrag €", value=1000)
             cap_tax_rate = 0.26375 
@@ -109,12 +109,12 @@ with st.expander("2. Karriere, Gehalt & Steuerklasse", expanded=False):
             s3_fix_share = s1_fix_share
 
     st.markdown("---")
-    gift_active = st.checkbox("Schenkung/Erbe?")
+    gift_active = st.checkbox("Schenkung/Erbe?",value=True)
     gift_age = 0; gift_val = 0
     if gift_active:
         c4, c5 = st.columns(2)
         gift_age = c4.number_input("Alter bei Schenkung", value=38)
-        gift_val = c5.number_input("Betrag €", value=100000)
+        gift_val = c5.number_input("Betrag €", value=200000)
 
 # --- 3. WOHNEN ---
 with st.expander("3. Wohnsituation (Miete vs. Kauf)", expanded=False):
@@ -134,7 +134,7 @@ with st.expander("3. Wohnsituation (Miete vs. Kauf)", expanded=False):
         
     st.divider()
     
-    house_mode = st.radio("Strategie", ["Miete", "Eigenheim Kaufen"], horizontal=True)
+    house_mode = st.radio("Strategie", ["Miete", "Eigenheim Kaufen"], horizontal=True, value=True)
     
     if house_mode == "Eigenheim Kaufen":
         st.markdown("### 🏠 Kauf & Finanzierung")
@@ -181,7 +181,7 @@ with st.expander("3. Wohnsituation (Miete vs. Kauf)", expanded=False):
 with st.expander("4. Mobilität & Auto-Historie", expanded=False):
     st.markdown("Definiere verschiedene Phasen nacheinander.")
     
-    c1, c2 = st.columns(2)
+    c1, c2, c3, c4 = st.columns(4)
     # Phase 1: Leasing A
     c1.markdown("**Phase 1: Leasing**")
     car_p1_dur = c1.number_input("Dauer (Jahre) P1", value=3)
@@ -196,7 +196,7 @@ with st.expander("4. Mobilität & Auto-Historie", expanded=False):
         car_p2_cost = c2.number_input("Rate (All-In) P2 €", value=550)
         
     # Phase 3: Leasing C
-    c1.markdown("**Phase 3: Leasing**")
+    c3.markdown("**Phase 3: Leasing**")
     has_p3_car = c1.checkbox("Phase 3 an?", value=True)
     car_p3_dur = 0; car_p3_cost = 0
     if has_p3_car:
@@ -204,7 +204,7 @@ with st.expander("4. Mobilität & Auto-Historie", expanded=False):
         car_p3_cost = c1.number_input("Rate (All-In) P3 €", value=650)
         
     # Phase 4: Kauf
-    c2.markdown("**End-Phase: Kauf & Halten**")
+    c4.markdown("**End-Phase: Kauf & Halten**")
     has_buy_car = c2.checkbox("Wechsel auf Kauf?", value=True)
     car_buy_price = 0; car_buy_cycle = 6; car_buy_run = 0; car_buy_tax = 0
     if has_buy_car:
@@ -217,7 +217,7 @@ with st.expander("4. Mobilität & Auto-Historie", expanded=False):
 with st.expander("5. Lifestyle, Kinder & Sonderausgaben", expanded=False):
     # 1. Kinder Logik (Erweitert)
     st.subheader("👶 Kinder (3-Phasen-Modell)")
-    has_kids = st.checkbox("Kinder einplanen?")
+    has_kids = st.checkbox("Kinder einplanen?",value=True)
     kids_list = []
     
     # Init vars
@@ -261,9 +261,13 @@ with st.expander("5. Lifestyle, Kinder & Sonderausgaben", expanded=False):
         st.markdown("#### Urlaube (Gesamt)")
         n_vacations = st.number_input("Anzahl Urlaube p.a.", 1, 5, 3)
         budget_vac_total = 0
-        for v in range(n_vacations):
-            budget_vac_total += st.number_input(f"Budget Urlaub {v+1} €", value=2000, key=f"vac{v}")
-            
+        
+        budget_vac_total += st.number_input(f"Budget Urlaub {1} €", value=1500, key=f"vac{0}")
+
+        budget_vac_total += st.number_input(f"Budget Urlaub {2} €", value=1800, key=f"vac{1}")
+        budget_vac_total += st.number_input(f"Budget Urlaub {3} €", value=3000, key=f"vac{2}")
+
+
     with col_pers:
         st.markdown("### 100% Deine Kosten")
         pers_streaming = st.number_input("Streaming/Abos €", value=50)
@@ -280,7 +284,7 @@ with st.expander("5. Lifestyle, Kinder & Sonderausgaben", expanded=False):
 with st.expander("6. Rentenphase & Entnahme", expanded=False):
     renten_alter = st.number_input("Renteneintrittsalter", value=67)
     gesetzl_rente = st.number_input("Erwartete Gesetzl. Rente (Netto nach Steuer) €", value=3000)
-    entnahme_modus = st.radio("Entnahme-Strategie", ["Kapitalverzehr (Alles ausgeben)", "Ewige Rente (Nur Erträge)"])
+    entnahme_modus = st.radio("Entnahme-Strategie", ["Kapitalverzehr (Alles ausgeben)", "Ewige Rente (Nur Erträge)"],value="Ewige Rente (Nur Erträge)" )
 
 # ==============================================================================
 # LOGIC ENGINE
