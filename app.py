@@ -7,58 +7,97 @@ import plotly.graph_objects as go
 st.set_page_config(page_title="Ultimate Cashflow Master", page_icon="🏛️", layout="wide")
 st.markdown(" <style> div.block-container{padding-top:1rem;} </style> ", unsafe_allow_html=True)
 
-st.title("🏛️ Ultimate Cashflow: Detail-Planung & Analysen")
+st.title("🏛️ Ultimate Cashflow Master: Die Komplettlösung")
 
 # ==============================================================================
-# 1. SETUP & HAUSHALT (GLOBAL)
+# HILFSFUNKTIONEN (STEUER & LOGIK)
 # ==============================================================================
-tab_setup, tab_job, tab_house, tab_life, tab_res = st.tabs([
+
+def calc_netto_complex(brutto, st_klasse):
+    """
+    Näherungsweise Berechnung des Netto-Gehalts basierend auf Steuerklasse.
+    Dies ist eine Simulation, kein exakter Steuerrechner!
+    """
+    # Sozialabgaben (ca. 20-21% gedeckelt)
+    sv = min(brutto * 0.21, 18000) 
+    
+    # Grundfreibetrag Simulation
+    if st_klasse == "3":
+        freibetrag = 22000 # Verdoppelt (Splitting) + Bonus
+    elif st_klasse == "4":
+        freibetrag = 11600 # Wie Kl 1
+    else: # Kl 1
+        freibetrag = 11600
+        
+    zvE = max(0, brutto - sv - 1200 - freibetrag)
+    
+    # Progressive Steuerformel (Grob)
+    if zvE <= 0:
+        est = 0
+    elif zvE < 62000:
+        est = zvE * 0.30 # Durchschnittszonensatz
+    elif zvE < 277000:
+        est = 18000 + (zvE - 62000) * 0.42
+    else:
+        est = 110000 + (zvE - 277000) * 0.45
+
+    netto = brutto - sv - est
+    return max(0, netto)
+
+# ==============================================================================
+# INPUT TABS
+# ==============================================================================
+tab_setup, tab_job, tab_house, tab_car, tab_life, tab_rente, tab_res = st.tabs([
     "1. Setup & Partner", 
-    "2. Karriere", 
-    "3. Wohnen (Miete/Kauf)", 
-    "4. Lifestyle & Shopping",
-    "5. 📊 ANALYSE (Neu)"
+    "2. Job & Steuer", 
+    "3. Wohnen", 
+    "4. 🚗 Auto-Strategie",
+    "5. Lifestyle & Kinder",
+    "6. Rente",
+    "7. 📊 ANALYSE"
 ])
 
+# --- 1. SETUP ---
 with tab_setup:
     c1, c2, c3 = st.columns(3)
     with c1:
         st.subheader("Basis Daten")
         age_start = st.number_input("Startalter", value=31)
-        age_end = st.number_input("Endalter", value=70)
-        start_cap = st.number_input("Startkapital (Du) €", value=0)
+        age_end = st.number_input("Endalter (Betrachtung)", value=85)
+        start_cap = st.number_input("Startkapital (Du) €", value=50000)
         
     with c2:
-        st.subheader("Markt")
-        r_invest = st.number_input("Rendite p.a. (%)", value=7.0)/100
-        r_infla = st.number_input("Inflation p.a. (%)", value=2.0)/100
+        st.subheader("Markt & Kapitalsteuer")
+        r_invest = st.number_input("Rendite p.a. (Brutto) %", value=7.0)/100
+        r_infla = st.number_input("Inflation p.a. %", value=2.0)/100
         
+        has_cap_tax = st.checkbox("Kapitalertragsteuer abziehen?", value=True)
+        if has_cap_tax:
+            cap_freibetrag = st.number_input("Sparer-Pauschbetrag €", value=1000)
+            cap_tax_rate = 0.26375 # 25% + Soli
+        else:
+            cap_freibetrag = 99999999
+            cap_tax_rate = 0.0
+            
     with c3:
         st.subheader("Haushalt & Split")
         partner_share = st.slider("Mein Kostenanteil (%)", 0, 100, 65, help="Wieviel % der GEMEINSAMEN Kosten trägst du?") / 100
         has_partner = st.checkbox("Partner vorhanden?", value=True)
-        
-    st.divider()
-    st.subheader("Kinderplanung")
-    has_kids = st.checkbox("Kinder einplanen?")
-    kids_data = []
-    if has_kids:
-        n_kids = st.number_input("Anzahl Kinder", 1, 5, 2)
-        k_geld_val = st.number_input("Kindergeld pro Kind €", value=250)
-        cols = st.columns(n_kids)
-        for i in range(n_kids):
-            with cols[i]:
-                birth_age = st.number_input(f"Dein Alter bei Kind {i+1}", value=33 + (i*2))
-                kids_data.append(birth_age)
-    else:
-        k_geld_val = 0
 
-# ==============================================================================
-# 2. KARRIERE
-# ==============================================================================
+# --- 2. JOB ---
 with tab_job:
-    st.info("Definiere deine Karriere-Stufen. Steuer wird automatisch geschätzt.")
+    st.info("Steuerklassen-Logik simuliert Netto basierend auf DE-Tarifzonen.")
+    
+    col_st, col_car = st.columns([1, 2])
+    with col_st:
+        tax_class = st.selectbox("Lohnsteuerklasse", ["1", "3", "4"])
+    
+    # KARRIERE MATRIX
     c1, c2, c3 = st.columns(3)
+    
+    # Init Variables (Defaults)
+    s2_active, s2_age, s2_brutto, s2_fix, s2_grow = False, 0, 0, 0, 0
+    s3_active, s3_age, s3_brutto, s3_fix, s3_grow = False, 0, 0, 0, 0
     
     with c1: 
         st.markdown("**Phase 1 (Start)**")
@@ -69,38 +108,46 @@ with tab_job:
     with c2: 
         st.markdown("**Phase 2 (Beförderung)**")
         s2_active = st.checkbox("Aktivieren", key="s2on")
-        s2_age = st.number_input("Alter bei Start", value=36)
-        s2_brutto = st.number_input("Brutto p.a. €", value=130000, key="b2")
-        s2_fix_share = st.slider("Fix-Anteil %", 0, 100, 75, key="s2") / 100
-        s2_growth = st.number_input("Steigerung p.a. %", value=1.5, key="g2") / 100
+        if s2_active:
+            s2_age = st.number_input("Alter Start", value=36)
+            s2_brutto = st.number_input("Brutto p.a. €", value=130000, key="b2")
+            s2_fix_share = st.slider("Fix-Anteil %", 0, 100, 75, key="s2") / 100
+            s2_growth = st.number_input("Steigerung p.a. %", value=1.5, key="g2") / 100
+        else:
+            s2_fix_share = s1_fix_share # Fallback
         
     with c3: 
         st.markdown("**Phase 3 (Senior)**")
         s3_active = st.checkbox("Aktivieren", key="s3on")
-        s3_age = st.number_input("Alter bei Start", value=42, key="a3")
-        s3_brutto = st.number_input("Brutto p.a. €", value=160000, key="b3")
-        s3_fix_share = st.slider("Fix-Anteil %", 0, 100, 70, key="s3") / 100
-        s3_growth = st.number_input("Steigerung p.a. %", value=1.0, key="g3") / 100
+        if s3_active:
+            s3_age = st.number_input("Alter Start", value=42, key="a3")
+            s3_brutto = st.number_input("Brutto p.a. €", value=160000, key="b3")
+            s3_fix_share = st.slider("Fix-Anteil %", 0, 100, 70, key="s3") / 100
+            s3_growth = st.number_input("Steigerung p.a. %", value=1.0, key="g3") / 100
+        else:
+            s3_fix_share = s1_fix_share # Fallback
 
     st.markdown("---")
     gift_active = st.checkbox("Schenkung/Erbe?")
+    gift_age = 0; gift_val = 0
     if gift_active:
         c4, c5 = st.columns(2)
         gift_age = c4.number_input("Alter bei Schenkung", value=50)
         gift_val = c5.number_input("Betrag €", value=100000)
-    else:
-        gift_age = 0; gift_val = 0
 
-# ==============================================================================
-# 3. WOHNEN (MIETE & KAUF LOGIK)
-# ==============================================================================
+# --- 3. WOHNEN ---
 with tab_house:
-    st.subheader("Aktuelle Situation (Miete)")
-    st.caption("Diese Miete zahlst du ab heute (bis ans Ende oder bis zum Hauskauf).")
+    # Init Vars
+    buy_age, price_total, ek_total, loan_amount = 0,0,0,0
+    interest_rate, sim_rate_total, maintenance = 0,0,0
+    buy_costs_pct = 0
+    sondertilgung_active = False
+    sondertilgung_amt = 0
+    sondertilgung_inc = 0
     
     c_rent1, c_rent2, c_rent3 = st.columns(3)
-    rent_start = c_rent1.number_input("Kaltmiete Start (Gesamt) €", value=1600)
-    rent_incr_mode = c_rent2.radio("Steigerung", ["Index (%)", "Staffel (€)"])
+    rent_start = c_rent1.number_input("Aktuelle Kaltmiete (Gesamt) €", value=1600)
+    rent_incr_mode = c_rent2.radio("Miet-Steigerung", ["Index (%)", "Staffel (€)"])
     if rent_incr_mode == "Index (%)":
         rent_incr_val = c_rent3.number_input("Index %", value=2.0) / 100
     else:
@@ -108,28 +155,29 @@ with tab_house:
         
     st.divider()
     
-    house_mode = st.radio("Zukunfts-Strategie", ["Für immer Miete", "Eigenheim Kaufen"], horizontal=True)
-    
-    buy_age = 0; price_total = 0; ek_total = 0; loan_amount = 0
-    interest_rate = 0; sim_rate_total = 0; maintenance = 0
+    house_mode = st.radio("Strategie", ["Miete", "Eigenheim Kaufen"], horizontal=True)
     
     if house_mode == "Eigenheim Kaufen":
-        st.markdown("### 🏠 Kauf-Finanzierung")
+        st.markdown("### 🏠 Kauf & Finanzierung")
         k1, k2, k3 = st.columns(3)
         buy_age = k1.number_input("Kaufalter", value=38)
-        price_total = k1.number_input("Kaufpreis (inkl. NK) €", value=700000)
-        ek_total = k2.number_input("Eigenkapital (Gesamt) €", value=150000)
-        loan_amount = price_total - ek_total
+        price_total = k1.number_input("Kaufpreis (Objekt) €", value=600000)
+        buy_costs_pct = k1.number_input("Kaufnebenkosten % (Notar/Steuer)", value=10.0)/100
         
+        price_all_in = price_total * (1 + buy_costs_pct)
+        k1.caption(f"Gesamtkosten: {price_all_in:,.0f} €")
+        
+        ek_total = k2.number_input("Eigenkapital (Gesamt) €", value=150000)
+        loan_amount = price_all_in - ek_total
         k2.metric("Kreditsumme", f"{loan_amount:,.0f} €")
         
         interest_rate = k3.number_input("Sollzins %", value=3.4) / 100
-        calc_method = k3.radio("Berechnung", ["Rate fixieren", "Laufzeit fixieren"])
+        calc_method = k3.radio("Kredit-Modus", ["Rate fixieren", "Laufzeit fixieren"])
         
         if calc_method == "Rate fixieren":
             sim_rate_total = k3.number_input("Wunschrate (Zins+Tilgung) €", value=2300)
         else:
-            target_years = k3.number_input("Laufzeit (Jahre)", value=25)
+            target_years = k3.number_input("Soll-Laufzeit (Jahre)", value=25)
             q = 1 + interest_rate/12
             n = target_years * 12
             if loan_amount > 0:
@@ -138,17 +186,97 @@ with tab_house:
             
         maintenance = k1.number_input("Instandhaltung (Gesamt) €", value=400)
         
+        # SONDERTILGUNG
+        st.markdown("#### Sondertilgung")
+        sondertilgung_active = st.checkbox("Sondertilgung planen?")
+        if sondertilgung_active:
+            sc1, sc2 = st.columns(2)
+            sondertilgung_amt = sc1.number_input("Betrag pro Jahr €", value=5000)
+            sondertilgung_inc = sc2.number_input("Jährliche Erhöhung der SoTi €", value=0, help="Steigert die Sondertilgung jährlich um X Euro")
+
     st.divider()
-    st.subheader("Nebenkosten (Gesamt-Haushalt)")
-    st.caption("Skaliert mit Personenanzahl im Haushalt.")
+    st.caption("Nebenkosten (skalieren mit Personenanzahl)")
     nc1, nc2 = st.columns(2)
     nk_base_1 = nc1.number_input("NK Basis (1 Person) €", value=200)
     nk_add_p = nc2.number_input("Zusatz pro weitere Person €", value=75)
 
-# ==============================================================================
-# 4. LIFESTYLE & SHOPPING
-# ==============================================================================
+# --- 4. AUTO ---
+with tab_car:
+    st.subheader("🚗 Auto-Historie")
+    st.markdown("Definiere verschiedene Phasen nacheinander.")
+    
+    # Phase 1: Leasing A
+    st.markdown("**Phase 1: Leasing**")
+    c1, c2 = st.columns(2)
+    car_p1_dur = c1.number_input("Dauer (Jahre) Phase 1", value=3)
+    car_p1_cost = c2.number_input("Rate (All-In) Phase 1 €", value=450)
+    
+    # Phase 2: Leasing B
+    st.markdown("**Phase 2: Leasing (folgt danach)**")
+    has_p2_car = st.checkbox("Phase 2 aktivieren?", value=True)
+    car_p2_dur = 0; car_p2_cost = 0
+    if has_p2_car:
+        c1, c2 = st.columns(2)
+        car_p2_dur = c1.number_input("Dauer (Jahre) Phase 2", value=3)
+        car_p2_cost = c2.number_input("Rate (All-In) Phase 2 €", value=550)
+        
+    # Phase 3: Leasing C
+    st.markdown("**Phase 3: Leasing (folgt danach)**")
+    has_p3_car = st.checkbox("Phase 3 aktivieren?", value=True)
+    car_p3_dur = 0; car_p3_cost = 0
+    if has_p3_car:
+        c1, c2 = st.columns(2)
+        car_p3_dur = c1.number_input("Dauer (Jahre) Phase 3", value=3)
+        car_p3_cost = c2.number_input("Rate (All-In) Phase 3 €", value=600)
+        
+    # Phase 4: Kauf
+    st.markdown("---")
+    st.markdown("**End-Phase: Kauf & Halten**")
+    has_buy_car = st.checkbox("Nach Leasing auf 'Kauf' wechseln?", value=True)
+    car_buy_price = 0; car_buy_cycle = 6; car_buy_run = 0; car_buy_tax = 0
+    if has_buy_car:
+        c1, c2 = st.columns(2)
+        car_buy_price = c1.number_input("Kaufpreis (Basis Heute) €", value=35000)
+        car_buy_cycle = c2.number_input("Neukauf alle X Jahre", value=8)
+        car_buy_run = c1.number_input("Rücklage Reparatur (mtl) €", value=150)
+        car_buy_tax = c2.number_input("Versicherung/Steuer (Jahr) €", value=800)
+
+# --- 5. LIFESTYLE & KINDER ---
 with tab_life:
+    # 1. Kinder Logik (Erweitert)
+    st.subheader("👶 Kinder (3-Phasen-Modell)")
+    has_kids = st.checkbox("Kinder einplanen?")
+    kids_list = []
+    
+    # Init vars
+    cost_k1=0; cost_k2=0; cost_k3=0; kgeld_val=0; age_k1_end=0; age_k2_end=0; age_k3_end=0; kgeld_end=0
+    
+    if has_kids:
+        # Konfiguration Phasen
+        k_col1, k_col2, k_col3, k_col4 = st.columns(4)
+        cost_k1 = k_col1.number_input("Kosten Phase 1 (Kind) €", value=400)
+        age_k1_end = k_col1.number_input("Bis Alter", value=12)
+        
+        cost_k2 = k_col2.number_input("Kosten Phase 2 (Jugend) €", value=600)
+        age_k2_end = k_col2.number_input("Bis Alter ", value=18)
+        
+        cost_k3 = k_col3.number_input("Kosten Phase 3 (Student) €", value=800)
+        age_k3_end = k_col3.number_input("Bis Alter  ", value=25)
+        
+        kgeld_val = k_col4.number_input("Kindergeld €", value=250)
+        kgeld_end = k_col4.number_input("Kindergeld Ende (Alter)", value=25)
+        
+        st.markdown("###### Geburtstermine")
+        n_kids = st.number_input("Anzahl Kinder", 1, 5, 2)
+        cols = st.columns(n_kids)
+        for i in range(n_kids):
+            with cols[i]:
+                birth_age = st.number_input(f"Dein Alter bei Kind {i+1}", value=33 + (i*3))
+                kids_list.append(birth_age)
+
+    st.divider()
+    
+    # 2. Lifestyle
     col_share, col_pers = st.columns(2)
     
     with col_share:
@@ -175,31 +303,17 @@ with tab_life:
         cost_clothes = st.number_input("Klamotten (Jahr) €", value=1000)
         cost_gadgets = st.number_input("Gadgets/Tech (Jahr) €", value=1000)
         cost_xmas = st.number_input("Weihnachten/Geschenke (Jahr) €", value=500)
-        
-        st.markdown("#### Dein Auto")
-        car_type = st.selectbox("Typ", ["Leasing", "Kauf (Bar)", "Kein Auto"])
-        car_cost_mo = 0; car_tax_yr = 0; car_buy_price = 0; car_cycle = 6
-        
-        if car_type == "Leasing":
-            car_cost_mo = st.number_input("Rate (inkl. Vers) €", value=550)
-        elif car_type == "Kauf (Bar)":
-            car_buy_price = st.number_input("Kaufpreis (Heute) €", value=35000)
-            car_cycle = st.number_input("Neukauf alle X Jahre", value=6)
-            car_cost_mo = st.number_input("Rücklage Reparatur €", value=150)
-            car_tax_yr = st.number_input("Steuer/Versicherung (Jahr) €", value=800)
 
+# --- 6. RENTE ---
+with tab_rente:
+    st.subheader("Rentenphase")
+    renten_alter = st.number_input("Renteneintrittsalter", value=67)
+    gesetzl_rente = st.number_input("Erwartete Gesetzl. Rente (Netto nach Steuer) €", value=2000)
+    entnahme_modus = st.radio("Strategie", ["Kapitalverzehr (Alles ausgeben)", "Ewige Rente (Nur Erträge)"])
 
 # ==============================================================================
 # LOGIC ENGINE
 # ==============================================================================
-
-def calc_tax(brutto):
-    sv = min(brutto * 0.20, 16000) 
-    taxable = brutto - sv - 1200
-    if taxable < 11600: tax = 0
-    elif taxable < 66000: tax = (taxable - 11600) * 0.35
-    else: tax = 19000 + (taxable - 66000) * 0.42
-    return brutto - sv - tax
 
 def simulate():
     months = (age_end - age_start) * 12
@@ -224,11 +338,21 @@ def simulate():
     
     c_stream = pers_streaming; c_insur = pers_insur; c_fun = pers_fun; c_mob = pers_mobile
     c_cloth = cost_clothes; c_gadget = cost_gadgets; c_xmas = cost_xmas
-    
-    c_car_mo = car_cost_mo; c_car_tax = car_tax_yr
     c_maint = maintenance
     
+    # Kinder Kosten (Basis heute)
+    ck1 = cost_k1; ck2 = cost_k2; ck3 = cost_k3
+    
+    # Auto
+    cbuy_price = car_buy_price; cbuy_run = car_buy_run; cbuy_tax = car_buy_tax
+    
+    soti_curr = sondertilgung_amt
     sim_rate = 0 
+    
+    # Auto Timing berechnen
+    end_p1 = car_p1_dur * 12
+    end_p2 = end_p1 + (car_p2_dur * 12 if has_p2_car else 0)
+    end_p3 = end_p2 + (car_p3_dur * 12 if has_p3_car else 0)
     
     for m in range(months + 1):
         idx_yr = m // 12
@@ -236,7 +360,9 @@ def simulate():
         age = age_start + idx_yr
         year = 2026 + idx_yr
         
-        # --- JANUAR UPDATES ---
+        is_retired = (age >= renten_alter)
+        
+        # --- JANUAR UPDATES (Inflation) ---
         if m > 0 and idx_mo == 0:
             f_inf = (1 + r_infla)
             # Inflation
@@ -244,23 +370,24 @@ def simulate():
             c_groc *= f_inf; c_food *= f_inf; c_util *= f_inf
             c_vac_total *= f_inf; c_cloth *= f_inf; c_gadget *= f_inf; c_xmas *= f_inf
             c_stream *= f_inf; c_insur *= f_inf; c_fun *= f_inf; c_mob *= f_inf
-            c_car_mo *= f_inf; c_car_tax *= f_inf
             c_maint *= f_inf
+            
+            # Kinderkosten steigen
+            ck1 *= f_inf; ck2 *= f_inf; ck3 *= f_inf
+            
+            # Auto Kaufpreis & Unterhalt (Buy Phase)
+            cbuy_price *= f_inf; cbuy_run *= f_inf; cbuy_tax *= f_inf
             
             # Gehalt
             cur_brutto *= (1 + cur_growth)
             
-            # Miete (falls noch Miete)
+            # Miete
             if not own_house:
                 if rent_incr_mode == "Index (%)": cur_rent *= (1 + rent_incr_val)
                 else: cur_rent += rent_incr_val
             
-            # Hauswert
             if own_house: house_val *= f_inf
-            
-            # Auto Kauf (Cash)
-            if car_type == "Kauf (Bar)" and idx_yr > 0 and idx_yr % int(car_cycle) == 0:
-                wealth -= (car_buy_price * (f_inf ** idx_yr))
+            soti_curr += sondertilgung_inc
 
         # --- EVENTS ---
         if s2_active and age == s2_age and idx_mo == 0:
@@ -274,7 +401,7 @@ def simulate():
             wealth -= ek_invest
             loan_bal = loan_amount
             sim_rate = sim_rate_total
-            house_val = price_total
+            house_val = price_total # Wert = Objektpreis
             own_house = True
             cur_rent = 0
             
@@ -282,81 +409,133 @@ def simulate():
             wealth += gift_val
 
         # --- INCOME ---
-        netto_jahr = calc_tax(cur_brutto)
-        netto_fix_mo = (netto_jahr * cur_fix_share) / 12
-        netto_var_yr = netto_jahr * (1 - cur_fix_share)
+        if not is_retired:
+            netto_jahr = calc_netto_complex(cur_brutto, tax_class)
+            netto_fix_mo = (netto_jahr * cur_fix_share) / 12
+            netto_var_yr = netto_jahr * (1 - cur_fix_share)
+            
+            income = netto_fix_mo
+            if idx_mo == 11: income += netto_var_yr
+        else:
+            # Rente
+            income = gesetzl_rente * ((1 + 0.01)**(idx_yr)) # Annahme: Rente steigt leicht
+
+        # Kindergeld & Kinderkosten (Phasen)
+        n_kids_in_house = 0
+        kids_inc_now = 0
+        kids_cost_now = 0
         
-        income = netto_fix_mo
-        if idx_mo == 11: income += netto_var_yr
-        
-        # Kindergeld
-        n_kids_act = 0
         if has_kids:
-            for k_birth in kids_data:
-                if k_birth <= age < (k_birth + 20): n_kids_act += 1
-        income += (n_kids_act * k_geld_val)
+            for k_birth in kids_list:
+                k_age = age - k_birth
+                if k_age >= 0:
+                    # Welche Kostenphase?
+                    c_k_curr = 0
+                    if k_age < age_k1_end: c_k_curr = ck1
+                    elif k_age < age_k2_end: c_k_curr = ck2
+                    elif k_age < age_k3_end: c_k_curr = ck3
+                    
+                    if c_k_curr > 0: n_kids_in_house += 1
+                    
+                    # Kindergeld
+                    if k_age < kgeld_end:
+                        kids_inc_now += kgeld_val
+                    
+                    kids_cost_now += c_k_curr
+
+        income += kids_inc_now
+        
+        # --- AUTO LOGIK (PHASEN) ---
+        c_auto_curr = 0
+        # Phase Check
+        if m < end_p1:
+            c_auto_curr = car_p1_cost # Leasing 1
+        elif m < end_p2:
+            c_auto_curr = car_p2_cost # Leasing 2
+        elif m < end_p3:
+            c_auto_curr = car_p3_cost # Leasing 3
+        else:
+            # Buy Phase
+            if has_buy_car:
+                c_auto_curr = cbuy_run
+                if idx_mo == 0: c_auto_curr += cbuy_tax
+                
+                # Kauf Event alle X Jahre
+                months_in_buy = m - end_p3
+                if months_in_buy >= 0 and months_in_buy % (car_buy_cycle*12) == 0:
+                    wealth -= cbuy_price
         
         # --- EXPENSES ---
-        persons = (2 if has_partner else 1) + n_kids_act
+        # Haushaltsgröße für NK
+        persons = (2 if has_partner else 1) + n_kids_in_house
         nk_curr = c_nk_base + max(0, (persons - 1)) * c_nk_add
         
-        # 1. FIXE KOSTEN (Kategorisierung für Analyse)
-        # Miete, Kredit, NK, Versicherungen, Internet, Handy, Auto Rate
-        cost_fix_total = 0
-        
-        # Wohnen
+        # 1. Wohnen
         if own_house:
             housing_cost_shared = sim_rate + nk_curr + c_maint + c_util
-            # Tilgung
             zins_eur = loan_bal * (interest_rate/12)
             loan_bal -= (sim_rate - zins_eur)
+            
+            if sondertilgung_active and idx_mo == 11 and loan_bal > 0:
+                loan_bal -= soti_curr
+                wealth -= (soti_curr * partner_share)
+            
             if loan_bal < 0: loan_bal = 0
         else:
             housing_cost_shared = cur_rent + nk_curr + c_util
         
         my_housing = housing_cost_shared * partner_share
         
-        # Persönliche Fixe
-        my_fix_pers = c_stream + c_insur + c_mob + c_car_mo
-        if idx_mo == 0: my_fix_pers += c_car_tax
-        
-        total_fix_output = my_housing + my_fix_pers
-        
-        # 2. VARIABLE KOSTEN
-        # Essen, Spaß, Klamotten, Urlaub, Weihnachten
+        # 2. Lifestyle & Kinder
         shared_var = c_groc + c_food
-        if idx_mo == 6: shared_var += c_vac_total # Urlaub Juli
+        if idx_mo == 6: shared_var += c_vac_total 
         
         my_var_share = shared_var * partner_share
+        my_kids_share = kids_cost_now * partner_share
         
-        my_var_pers = c_fun
-        if idx_mo == 4: my_var_pers += c_cloth # Mai Shopping?
-        if idx_mo == 10: my_var_pers += c_gadget # Nov Tech?
-        if idx_mo == 11: my_var_pers += c_xmas
+        # Persönlich
+        my_pers = c_stream + c_insur + c_mob + c_fun + c_auto_curr
+        if idx_mo == 4: my_pers += c_cloth
+        if idx_mo == 10: my_pers += c_gadget
+        if idx_mo == 11: my_pers += c_xmas
         
-        total_var_output = my_var_share + my_var_pers
+        total_out = my_housing + my_var_share + my_kids_share + my_pers
         
-        # GESAMT
-        total_out = total_fix_output + total_var_output
-        
+        # --- BILANZ ---
         cf = income - total_out
-        wealth *= (1 + r_invest)**(1/12)
-        wealth += cf
         
+        gain = wealth * ((1 + r_invest)**(1/12) - 1)
+        if has_cap_tax and gain > 0:
+            taxable = max(0, gain - (cap_freibetrag/12))
+            gain -= (taxable * cap_tax_rate)
+            
+        wealth += gain
+        
+        # Entnahme im Alter
+        if is_retired and cf < 0 and entnahme_modus == "Kapitalverzehr (Alles ausgeben)":
+            wealth += cf # negativ, also Abzug
+        
+        # In der Ansparphase
+        if cf > 0:
+            wealth += cf
+            
         equity = max(0, house_val - loan_bal) * partner_share
         
         data.append({
             "Alter": age, "Jahr": year, "Monat": idx_mo+1,
-            "Netto": round(income),
-            "Ausgaben_Fix": round(total_fix_output),
-            "Ausgaben_Variabel": round(total_var_output),
+            "Einkommen": round(income),
             "Ausgaben_Total": round(total_out),
-            "Sparrate": round(cf),
+            "Ausgaben_Wohnen": round(my_housing),
+            "Ausgaben_Kinder": round(my_kids_share),
+            "Ausgaben_Auto": round(c_auto_curr),
+            "Ausgaben_Leben": round(my_var_share),
+            "Ausgaben_Persönlich": round(my_pers),
+            "Cashflow": round(cf),
             "Vermögen": round(wealth),
             "Immo_Equity": round(equity),
             "Gesamtvermögen": round(wealth + equity),
             "Restschuld": round(loan_bal),
-            "Urlaubs_Kosten_Anteil": round((c_vac_total if idx_mo == 6 else 0) * partner_share)
+            "Urlaub_Invest": round((c_vac_total if idx_mo == 6 else 0) * partner_share)
         })
         
     return pd.DataFrame(data)
@@ -364,54 +543,47 @@ def simulate():
 df = simulate()
 
 # ==============================================================================
-# 5. ANALYSE
+# 7. ANALYSE (VISUALS)
 # ==============================================================================
 with tab_res:
     st.subheader("📊 Deine Finanz-Analyse")
     
     last = df.iloc[-1]
-    st.metric("Endvermögen (Alter " + str(age_end) + ")", f"{last['Gesamtvermögen']:,.0f} €", f"Depot: {last['Vermögen']:,.0f} €")
+    st.metric("Endvermögen (Alter " + str(age_end) + ")", f"{last['Gesamtvermögen']:,.0f} €", f"Restschuld: {last['Restschuld']:,.0f} €")
     
     st.divider()
     
-    # --- NEU: FIX VS VARIABEL HEUTE VS 20 JAHRE ---
-    st.markdown("### 🔮 Kosten-Struktur: Heute vs. in 20 Jahren")
+    # 1. Stacked Area Chart (DIE RUSH HOUR DES LEBENS)
+    st.markdown("### 🏔️ Die 'Rush Hour' deines Lebens (Ausgaben)")
     
-    # Jahr 1 Daten
-    row_now = df[(df['Jahr'] == 2026)].sum(numeric_only=True)
-    fix_now = row_now['Ausgaben_Fix']
-    var_now = row_now['Ausgaben_Variabel']
+    df_yr = df.groupby("Alter").sum(numeric_only=True).reset_index()
     
-    # Jahr 20 Daten
-    row_fut = df[(df['Jahr'] == 2046)].sum(numeric_only=True)
-    fix_fut = row_fut['Ausgaben_Fix']
-    var_fut = row_fut['Ausgaben_Variabel']
+    fig_stack = go.Figure()
+    fig_stack.add_trace(go.Scatter(x=df_yr["Alter"], y=df_yr["Ausgaben_Wohnen"], name="Wohnen", stackgroup='one'))
+    fig_stack.add_trace(go.Scatter(x=df_yr["Alter"], y=df_yr["Ausgaben_Kinder"], name="Kinder", stackgroup='one'))
+    fig_stack.add_trace(go.Scatter(x=df_yr["Alter"], y=df_yr["Ausgaben_Auto"], name="Auto", stackgroup='one'))
+    fig_stack.add_trace(go.Scatter(x=df_yr["Alter"], y=df_yr["Ausgaben_Leben"], name="Lifestyle & Urlaub", stackgroup='one'))
+    fig_stack.add_trace(go.Scatter(x=df_yr["Alter"], y=df_yr["Ausgaben_Persönlich"], name="Privat & Sonstiges", stackgroup='one'))
     
-    col_comp1, col_comp2 = st.columns(2)
+    fig_stack.update_layout(height=450, yaxis_title="Jahresausgaben €", hovermode="x unified")
+    st.plotly_chart(fig_stack, use_container_width=True)
     
-    with col_comp1:
-        st.markdown(f"**Jahr 2026 (Gesamt)**")
-        st.bar_chart({"Fix": fix_now, "Variabel": var_now}, horizontal=True, color=["#FF4B4B", "#FFA500"])
-        st.caption(f"Fixkosten-Quote: {fix_now/(fix_now+var_now)*100:.1f}%")
-
-    with col_comp2:
-        st.markdown(f"**Jahr 2046 (Gesamt)**")
-        st.bar_chart({"Fix": fix_fut, "Variabel": var_fut}, horizontal=True, color=["#FF4B4B", "#FFA500"])
-        st.caption(f"Fixkosten-Quote: {fix_fut/(fix_fut+var_fut)*100:.1f}%")
-        
-    st.info("Hinweis: Wenn du ein Haus kaufst, bleiben die Fixkosten (Kredit) oft stabil, während variable Kosten (Essen/Urlaub) mit der Inflation steigen. Das senkt deine Fixkostenquote langfristig!")
-
-    st.divider()
+    # 2. Vermögen
+    st.markdown("### 📈 Vermögensentwicklung")
+    fig_w = go.Figure()
+    fig_w.add_trace(go.Scatter(x=df["Alter"], y=df["Vermögen"], name="Liquides Depot", fill='tozeroy'))
+    if house_mode == "Eigenheim Kaufen":
+        fig_w.add_trace(go.Scatter(x=df["Alter"], y=df["Immo_Equity"], name="Immo Equity (Netto)", fill='tonexty'))
+    st.plotly_chart(fig_w, use_container_width=True)
     
-    # Urlaubs Aggregation
-    total_vacation_spend = df["Urlaubs_Kosten_Anteil"].sum()
-    st.metric("🌴 Gesamtausgaben für Urlaub (Dein Anteil, aggregiert)", f"{total_vacation_spend:,.0f} €")
+    # 3. Urlaubs Aggregation
+    vac_sum = df["Urlaub_Invest"].sum()
+    st.info(f"🌴 Du wirst in deinem Leben voraussichtlich **{vac_sum:,.0f} €** für Urlaub ausgeben (Dein Anteil).")
     
-    st.divider()
-    
-    st.markdown("### 📌 Meilensteine (5-Jahres-Schritte)")
-    milestones = [35, 40, 45, 50, 55, 60, 65, 70]
+    # 4. Meilensteine
+    st.markdown("### 📌 Meilensteine")
+    milestones = [35, 40, 45, 50, 55, 60, 65, 70, 75, 80]
     mask = (df["Alter"].isin(milestones)) & (df["Monat"] == 1)
-    st.dataframe(df.loc[mask, ["Alter", "Gesamtvermögen", "Restschuld", "Ausgaben_Fix", "Ausgaben_Variabel"]].style.format("{:,.0f} €"), use_container_width=True)
+    st.dataframe(df.loc[mask, ["Alter", "Gesamtvermögen", "Restschuld", "Cashflow", "Ausgaben_Kinder"]].style.format("{:,.0f} €"), use_container_width=True)
 
-    st.download_button("📥 Alle Daten herunterladen (CSV)", df.to_csv(sep=";", decimal=",").encode('utf-8'), "finanzplan_final.csv")
+    st.download_button("📥 Detail-Daten (CSV)", df.to_csv(sep=";", decimal=",").encode('utf-8'), "finanzplan_final.csv")
