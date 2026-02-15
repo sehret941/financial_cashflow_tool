@@ -5,6 +5,7 @@ import plotly.graph_objects as go
 
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="Ultimate Cashflow Master", page_icon="🏛️", layout="wide")
+# Padding reduzieren
 st.markdown(" <style> div.block-container{padding-top:1rem;} </style> ", unsafe_allow_html=True)
 
 st.title("🏛️ Ultimate Cashflow: Detail-Planung & Partner-Split")
@@ -59,7 +60,6 @@ with tab_setup:
 with tab_job:
     st.info("Definiere deine Karriere-Stufen. Steuer wird automatisch geschätzt.")
     
-    # Wir nutzen eine Liste von Dictionaries für die Stufen
     # STUFE 1 (START)
     c1, c2, c3, c4 = st.columns(4)
     with c1: st.markdown("**Phase 1 (Start)**")
@@ -98,13 +98,25 @@ with tab_job:
 with tab_house:
     house_mode = st.radio("Strategie", ["Miete", "Kauf"], horizontal=True)
     
+    # Initialisierung aller Variablen (WICHTIG gegen NameError)
+    rent_start = 0
+    rent_incr_mode = "Index (%)"
+    rent_incr_val = 0
+    
+    buy_age = 0
+    price_total = 0
+    ek_total = 0
+    loan_amount = 0
+    interest_rate = 0
+    sim_rate_total = 0
+    maintenance = 0
+    
     # NEBENKOSTEN LOGIK (PERSONENABHÄNGIG)
     st.subheader("Nebenkosten (Gesamt-Haushalt)")
     st.caption("Basis für 1-3+ Personen Haushalt. Wird automatisch skaliert.")
     c1, c2, c3 = st.columns(3)
     nk_base_1 = c1.number_input("NK Basis (1 Person) €", value=200)
-    nk_add_p = c2.number_input("Zusatz pro weitere Person €", value=100) # 2 Pers = 300, 3 Pers = 400
-    # Das ergibt bei 2 Personen ca 300-350 je nach Input
+    nk_add_p = c2.number_input("Zusatz pro weitere Person €", value=75) # Damit bei 2 Pers ca 350 rauskommt (200+150)
     
     if house_mode == "Miete":
         c1, c2 = st.columns(2)
@@ -129,7 +141,6 @@ with tab_house:
         interest_rate = k3.number_input("Sollzins %", value=3.4) / 100
         calc_method = k3.radio("Berechnung", ["Rate fixieren (Wann fertig?)", "Laufzeit fixieren (Welche Rate?)"])
         
-        sim_rate_total = 0
         if calc_method == "Rate fixieren (Wann fertig?)":
             sim_rate_total = k3.number_input("Wunschrate (Zins+Tilgung) €", value=2300)
         else:
@@ -137,7 +148,8 @@ with tab_house:
             # Annuität: R = K * q^n * (q-1) / (q^n - 1)
             q = 1 + interest_rate/12
             n = target_years * 12
-            sim_rate_total = loan_amount * (q**n * (q-1)) / (q**n - 1)
+            if loan_amount > 0:
+                sim_rate_total = loan_amount * (q**n * (q-1)) / (q**n - 1)
             k3.success(f"Notwendige Rate: {sim_rate_total:,.2f} €")
             
         maintenance = k1.number_input("Instandhaltung (Gesamt) €", value=400)
@@ -184,7 +196,7 @@ with tab_life:
     car_cost_mo = 0
     car_tax_yr = 0
     car_buy_price = 0
-    car_cycle = 0
+    car_cycle = 6
     
     if "Leasing" in car_type:
         car_cost_mo = st.number_input("Leasingrate €", value=450)
@@ -225,7 +237,7 @@ def simulate():
     cur_fix_share = s1_fix_share
     cur_growth = s1_growth
     
-    cur_rent = rent_start if house_mode == "Miete" else 0
+    cur_rent = rent_start
     
     # Startwerte für Kosten (werden inflatiert)
     # Haushalt (Basis)
@@ -236,6 +248,7 @@ def simulate():
     c_inet = cost_internet
     c_elec = cost_electr
     c_gez = cost_gez
+    # Variable c_maint sicherstellen (auf 0 fallback wenn nicht Kauf)
     c_maint = maintenance
     
     # Events
@@ -283,7 +296,7 @@ def simulate():
             if own_house: house_val *= f_inf
             
             # Auto Neukauf (Treppen-Effekt)
-            if "Kauf" in car_type and idx_yr > 0 and idx_yr % car_cycle == 0:
+            if "Kauf" in car_type and idx_yr > 0 and idx_yr % int(car_cycle) == 0:
                 price_now = car_buy_price * (f_inf ** idx_yr)
                 wealth -= price_now
                 
@@ -409,7 +422,7 @@ with tab_res:
     st.divider()
     
     st.markdown("### 📌 5-Jahres-Meilensteine (Die Excel-Ansicht)")
-    st.caption("Genau die Tabelle, die du wolltest.")
+    st.caption("Zeigt den Stand jeweils im Januar des Jahres.")
     
     # Filter für Meilensteine (Januar Werte)
     milestones = [35, 40, 45, 50, 55, 60, 65, 70]
@@ -432,4 +445,3 @@ with tab_res:
     if house_mode == "Kauf":
         fig.add_trace(go.Scatter(x=df["Alter"], y=df["Immo_Equity"], name="Haus Equity (Deins)", stackgroup='one'))
     st.plotly_chart(fig, use_container_width=True)
-
