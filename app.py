@@ -4,11 +4,11 @@ import numpy as np
 import plotly.graph_objects as go
 
 # --- PAGE CONFIG ---
-st.set_page_config(page_title="Ultimate Cashflow Master", page_icon="🏛️", layout="wide")
+st.set_page_config(page_title="Cashflow Tool", layout="wide")
 # Etwas CSS für einen saubereren Look
 st.markdown(" <style> div.block-container{padding-top:2rem;} </style> ", unsafe_allow_html=True)
 
-st.title("🏛️ Ultimate Cashflow Master")
+st.title("Cashflow Tool")
 st.markdown("Definiere deine Parameter in den unteren Sektionen. Alle Eingaben wirken sich sofort auf die Berechnung aus.")
 
 # ==============================================================================
@@ -45,12 +45,12 @@ with st.expander("1. Grundeinstellungen, Partner & Markt", expanded=False):
     with c1:
         st.subheader("Zeitraum & Start")
         age_start = st.number_input("Startalter", value=31)
-        age_end = st.number_input("Endalter (Betrachtung)", value=80)
-        start_cap = st.number_input("Startkapital (Du) €", value=50000)
+        age_end = st.number_input("Endalter (Betrachtung)", value=70)
+        start_cap = st.number_input("Startkapital (Du) €", value=0)
         
     with c2:
         st.subheader("Markt & Steuer")
-        r_invest = st.number_input("Rendite p.a. (Brutto) %", value=7.0)/100
+        r_invest = st.number_input("Rendite p.a. (Brutto) %", value=8.0)/100
         r_infla = st.number_input("Inflation p.a. %", value=2.0)/100
         
         has_cap_tax = st.checkbox("Kapitalertragsteuer abziehen?", value=True)
@@ -91,9 +91,9 @@ with st.expander("2. Karriere, Gehalt & Steuerklasse", expanded=False):
         s2_active = st.checkbox("Aktivieren", key="s2on")
         if s2_active:
             s2_age = st.number_input("Alter Start", value=36)
-            s2_brutto = st.number_input("Brutto p.a. €", value=130000, key="b2")
+            s2_brutto = st.number_input("Brutto p.a. €", value=145000, key="b2")
             s2_fix_share = st.slider("Fix-Anteil %", 0, 100, 75, key="s2") / 100
-            s2_growth = st.number_input("Steigerung p.a. %", value=1.5, key="g2") / 100
+            s2_growth = st.number_input("Steigerung p.a. %", value=1.0, key="g2") / 100
         else:
             s2_fix_share = s1_fix_share 
         
@@ -102,7 +102,7 @@ with st.expander("2. Karriere, Gehalt & Steuerklasse", expanded=False):
         s3_active = st.checkbox("Aktivieren", key="s3on")
         if s3_active:
             s3_age = st.number_input("Alter Start", value=42, key="a3")
-            s3_brutto = st.number_input("Brutto p.a. €", value=160000, key="b3")
+            s3_brutto = st.number_input("Brutto p.a. €", value=180000, key="b3")
             s3_fix_share = st.slider("Fix-Anteil %", 0, 100, 70, key="s3") / 100
             s3_growth = st.number_input("Steigerung p.a. %", value=1.0, key="g3") / 100
         else:
@@ -113,7 +113,7 @@ with st.expander("2. Karriere, Gehalt & Steuerklasse", expanded=False):
     gift_age = 0; gift_val = 0
     if gift_active:
         c4, c5 = st.columns(2)
-        gift_age = c4.number_input("Alter bei Schenkung", value=50)
+        gift_age = c4.number_input("Alter bei Schenkung", value=38)
         gift_val = c5.number_input("Betrag €", value=100000)
 
 # --- 3. WOHNEN ---
@@ -125,7 +125,7 @@ with st.expander("3. Wohnsituation (Miete vs. Kauf)", expanded=False):
     sondertilgung_active, sondertilgung_amt, sondertilgung_inc = False, 0, 0
     
     c_rent1, c_rent2, c_rent3 = st.columns(3)
-    rent_start = c_rent1.number_input("Aktuelle Kaltmiete (Gesamt) €", value=1600)
+    rent_start = c_rent1.number_input("Aktuelle Kaltmiete (Gesamt) €", value=1700)
     rent_incr_mode = c_rent2.radio("Miet-Steigerung", ["Index (%)", "Staffel (€)"])
     if rent_incr_mode == "Index (%)":
         rent_incr_val = c_rent3.number_input("Index %", value=2.0) / 100
@@ -140,11 +140,11 @@ with st.expander("3. Wohnsituation (Miete vs. Kauf)", expanded=False):
         st.markdown("### 🏠 Kauf & Finanzierung")
         k1, k2, k3 = st.columns(3)
         buy_age = k1.number_input("Kaufalter", value=38)
-        price_total = k1.number_input("Kaufpreis (Objekt) €", value=600000)
-        buy_costs_pct = k1.number_input("Kaufnebenkosten % (Notar/Steuer)", value=10.0)/100
+        price_total = k1.number_input("Kaufpreis (Objekt) €", value=800000)
+        buy_costs_pct = k1.number_input("Kaufnebenkosten % (Notar/Steuer)", value=11.5)/100
         
         price_all_in = price_total * (1 + buy_costs_pct)
-        ek_total = k2.number_input("Eigenkapital (Gesamt) €", value=150000)
+        ek_total = k2.number_input("Eigenkapital (Gesamt) €", value=400000)
         loan_amount = price_all_in - ek_total
         k2.metric("Kreditsumme", f"{loan_amount:,.0f} €")
         
@@ -168,7 +168,7 @@ with st.expander("3. Wohnsituation (Miete vs. Kauf)", expanded=False):
         if st.checkbox("Sondertilgung planen?"):
             sondertilgung_active = True
             sc1, sc2 = st.columns(2)
-            sondertilgung_amt = sc1.number_input("Betrag pro Jahr €", value=5000)
+            sondertilgung_amt = sc1.number_input("Betrag pro Jahr €", value=10000)
             sondertilgung_inc = sc2.number_input("Jährliche Erhöhung €", value=0)
 
     st.divider()
@@ -201,7 +201,7 @@ with st.expander("4. Mobilität & Auto-Historie", expanded=False):
     car_p3_dur = 0; car_p3_cost = 0
     if has_p3_car:
         car_p3_dur = c1.number_input("Dauer (Jahre) P3", value=3)
-        car_p3_cost = c1.number_input("Rate (All-In) P3 €", value=600)
+        car_p3_cost = c1.number_input("Rate (All-In) P3 €", value=650)
         
     # Phase 4: Kauf
     c2.markdown("**End-Phase: Kauf & Halten**")
@@ -226,13 +226,13 @@ with st.expander("5. Lifestyle, Kinder & Sonderausgaben", expanded=False):
     if has_kids:
         # Konfiguration Phasen
         k_col1, k_col2, k_col3, k_col4 = st.columns(4)
-        cost_k1 = k_col1.number_input("Kosten Phase 1 (Kind) €", value=400)
+        cost_k1 = k_col1.number_input("Kosten Phase 1 (Kind) €", value=800)
         age_k1_end = k_col1.number_input("Bis Alter", value=12)
         
-        cost_k2 = k_col2.number_input("Kosten Phase 2 (Jugend) €", value=600)
+        cost_k2 = k_col2.number_input("Kosten Phase 2 (Jugend) €", value=1000)
         age_k2_end = k_col2.number_input("Bis Alter ", value=18)
         
-        cost_k3 = k_col3.number_input("Kosten Phase 3 (Student) €", value=800)
+        cost_k3 = k_col3.number_input("Kosten Phase 3 (Student) €", value=1200)
         age_k3_end = k_col3.number_input("Bis Alter  ", value=25)
         
         kgeld_val = k_col4.number_input("Kindergeld €", value=250)
@@ -255,31 +255,31 @@ with st.expander("5. Lifestyle, Kinder & Sonderausgaben", expanded=False):
         st.markdown("### Geteilte Kosten (Haushalt)")
         st.caption("Dein Anteil: " + str(partner_share*100) + "%")
         cost_groc = st.number_input("Supermarkt/Drogerie €", value=600)
-        cost_food = st.number_input("Gastro/Bestellen €", value=200)
+        cost_food = st.number_input("Gastro/Bestellen €", value=500)
         cost_internet = st.number_input("Internet/Strom/TV €", value=170)
         
         st.markdown("#### Urlaube (Gesamt)")
         n_vacations = st.number_input("Anzahl Urlaube p.a.", 1, 5, 3)
         budget_vac_total = 0
         for v in range(n_vacations):
-            budget_vac_total += st.number_input(f"Budget Urlaub {v+1} €", value=1500, key=f"vac{v}")
+            budget_vac_total += st.number_input(f"Budget Urlaub {v+1} €", value=2000, key=f"vac{v}")
             
     with col_pers:
         st.markdown("### 100% Deine Kosten")
-        pers_streaming = st.number_input("Streaming/Abos €", value=30)
+        pers_streaming = st.number_input("Streaming/Abos €", value=50)
         pers_insur = st.number_input("Eigene Vers. (Haft/BU) €", value=80)
-        pers_fun = st.number_input("Hobby/Freizeit/Bar €", value=200)
-        pers_mobile = st.number_input("Handyvertrag €", value=40)
+        pers_fun = st.number_input("Hobby/Freizeit/Bar €", value=150)
+        pers_mobile = st.number_input("Handyvertrag €", value=15)
         
         st.markdown("#### Jährliche Sonderausgaben (Du)")
-        cost_clothes = st.number_input("Klamotten (Jahr) €", value=1000)
+        cost_clothes = st.number_input("Klamotten (Jahr) €", value=600)
         cost_gadgets = st.number_input("Gadgets/Tech (Jahr) €", value=1000)
         cost_xmas = st.number_input("Weihnachten/Geschenke (Jahr) €", value=500)
 
 # --- 6. RENTE ---
 with st.expander("6. Rentenphase & Entnahme", expanded=False):
     renten_alter = st.number_input("Renteneintrittsalter", value=67)
-    gesetzl_rente = st.number_input("Erwartete Gesetzl. Rente (Netto nach Steuer) €", value=2000)
+    gesetzl_rente = st.number_input("Erwartete Gesetzl. Rente (Netto nach Steuer) €", value=3000)
     entnahme_modus = st.radio("Entnahme-Strategie", ["Kapitalverzehr (Alles ausgeben)", "Ewige Rente (Nur Erträge)"])
 
 # ==============================================================================
