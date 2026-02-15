@@ -77,8 +77,8 @@ with st.expander("2. Karriere, Gehalt & Steuerklasse", expanded=False):
     c1, c2, c3 = st.columns(3)
     
     # Init Vars
-    s2_active, s2_age, s2_brutto, s2_fix, s2_grow = False, 0, 0, 0, 0
-    s3_active, s3_age, s3_brutto, s3_fix, s3_grow = False, 0, 0, 0, 0
+    s2_active, s2_age, s2_brutto, s2_fix, s2_grow = True, 0, 0, 0, 0
+    s3_active, s3_age, s3_brutto, s3_fix, s3_grow = True, 0, 0, 0, 0
     
     with c1: 
         st.markdown("**Phase 1 (Start)**")
@@ -92,7 +92,7 @@ with st.expander("2. Karriere, Gehalt & Steuerklasse", expanded=False):
         if s2_active:
             s2_age = st.number_input("Alter Start", value=36)
             s2_brutto = st.number_input("Brutto p.a. €", value=145000, key="b2")
-            s2_fix_share = st.slider("Fix-Anteil %", 0, 100, 75, key="s2") / 100
+            s2_fix_share = st.slider("Fix-Anteil %", 0, 100, 70, key="s2") / 100
             s2_growth = st.number_input("Steigerung p.a. %", value=1.0, key="g2") / 100
         else:
             s2_fix_share = s1_fix_share 
@@ -103,7 +103,7 @@ with st.expander("2. Karriere, Gehalt & Steuerklasse", expanded=False):
         if s3_active:
             s3_age = st.number_input("Alter Start", value=42, key="a3")
             s3_brutto = st.number_input("Brutto p.a. €", value=180000, key="b3")
-            s3_fix_share = st.slider("Fix-Anteil %", 0, 100, 70, key="s3") / 100
+            s3_fix_share = st.slider("Fix-Anteil %", 0, 100, 60, key="s3") / 100
             s3_growth = st.number_input("Steigerung p.a. %", value=1.0, key="g3") / 100
         else:
             s3_fix_share = s1_fix_share
